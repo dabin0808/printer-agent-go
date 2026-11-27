@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>模拟APP-云打印</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", sans-serif;
+    background: linear-gradient(160deg, #e8f4f8 0%, #f7fafc 100%);
+    min-height: 100vh;
+    display: flex; justify-content: center; align-items: flex-start;
+    padding: 30px 16px;
+  }
+  .phone {
+    width: 100%; max-width: 420px;
+    background: #fff; border-radius: 20px;
+    box-shadow: 0 8px 40px rgba(0,120,160,.12);
+    overflow: hidden;
+  }
+  .header {
+    background: linear-gradient(135deg, #0099cc 0%, #00b4d8 100%);
+    color: #fff; padding: 24px 20px 20px;
+  }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header p { font-size: 12px; opacity: .85; margin-top: 6px; }
+  .body { padding: 20px; }
+  .card {
+    border: 1px solid #e5eef2; border-radius: 12px;
+    padding: 16px; margin-bottom: 16px; background: #fafcfd;
+  }
+  .card h2 { font-size: 14px; color: #007799; margin-bottom: 12px; }
+  label { font-size: 13px; color: #567; display: block; margin: 10px 0 6px; }
+  select, input[type="number"] {
+    width: 100%; padding: 10px 12px; font-size: 14px;
+    border: 1px solid #cde3ec; border-radius: 8px; background: #fff;
+    outline: none;
+  }
+  select:focus, input:focus { border-color: #0099cc; }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+  .btn {
+    width: 100%; padding: 13px; font-size: 16px; font-weight: 600;
+    color: #fff; background: linear-gradient(135deg, #0099cc, #00aadd);
+    border: none; border-radius: 10px; cursor: pointer; margin-top: 6px;
+  }
+  .btn:active { opacity: .85; }
+  .btn.ghost {
+    background: #fff; color: #0099cc; border: 1px solid #0099cc;
+    font-size: 13px; padding: 9px; margin-top: 10px;
+  }
+  .log {
+    margin-top: 4px; max-height: 220px; overflow-y: auto;
+    background: #0d2b36; border-radius: 10px; padding: 12px;
+    font-family: Consolas, monospace; font-size: 12px; line-height: 1.7;
+    color: #9fd8ea;
+  }
+  .log .ok   { color: #7ee787; }
+  .log .err  { color: #ff7b72; }
+  .log .info { color: #c9d8dd; }
+  .empty-tip { font-size: 12px; color: #a99; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="header">
+    <h1>🖨️ 模拟APP · 云打印</h1>
+    <p>等价于真实 APP 里点「打印」按钮 — 任务经云端调度送到 PC 中转端打印机</p>
+  </div>
+  <div class="body">
+    <div class="card">
+      <h2>发送打印任务</h2>
+      <label>选择文件（files 目录）</label>
+      <select id="fileSel"><option>加载中…</option></select>
+      <label>目标打印机（中转端电脑上的打印机）</label>
+      <select id="printerSel"><option>加载中…</option></select>
+      <div class="row">
+        <div>
+          <label>份数</label>
+          <input type="number" id="copies" value="1" min="1" max="99">
+        </div>
+        <div>
+          <label>颜色（DevMode）</label>
+          <select id="color">
+            <option value="1">彩色</option>
+            <option value="2">黑白</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn" onclick="sendTask()">发 送 打 印 任 务</button>
+      <div class="row">
+        <button class="btn ghost" onclick="refreshFiles()">↻ 刷新文件</button>
+        <button class="btn ghost" onclick="refreshPrinters()">↻ 刷新打印机</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>任务日志</h2>
+      <div class="log" id="log"><div class="info">等待操作…</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = (location.protocol === 'file:' ? 'http://127.0.0.1:8000' : '');
+
+function log(msg, cls) {
+  const box = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = cls || 'info';
+  div.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+  box.prepend(div);
+}
+
+async function refreshFiles() {
+  try {
+    const r = await fetch(API + '/list_files');
+    const files = await r.json();
+    const sel = document.getElementById('fileSel');
+    sel.innerHTML = '';
+    if (!files.length) {
+      sel.innerHTML = '<option>（files 目录为空，请先放文件）</option>';
+      return;
+    }
+    files.forEach(f => {
+      const o = document.createElement('option');
+      o.value = f; o.textContent = f;
+      sel.appendChild(o);
+    });
+    log('文件列表已刷新，共 ' + files.length + ' 个', 'ok');
+  } catch (e) {
+    log('无法连接模拟云端(' + e + ')，请先运行 python -u mock_cloud.py', 'err');
+  }
+}
+
+async function refreshPrinters() {
+  try {
+    const r = await fetch(API + '/list_printers');
+    const printers = await r.json();
+    const sel = document.getElementById('printerSel');
+    sel.innerHTML = '';
+    const def = document.createElement('option');
+    def.value = '';
+    def.textContent = '（系统默认打印机）';
+    sel.appendChild(def);
+    printers.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p; o.textContent = p;
+      sel.appendChild(o);
+    });
+    log('打印机列表已刷新，共 ' + printers.length + ' 台', 'ok');
+  } catch (e) {
+    log('获取打印机失败(' + e + ')', 'err');
+  }
+}
+
+async function sendTask() {
+  const file = document.getElementById('fileSel').value;
+  const copies = document.getElementById('copies').value || 1;
+  const color = document.getElementById('color').value;
+  const printer = document.getElementById('printerSel').value;
+  if (!file || file.startsWith('（')) { log('请先选择有效文件', 'err'); return; }
+  try {
+    const body = new URLSearchParams({ filename: file, copies: copies, color: color, printer: printer });
+    const r = await fetch(API + '/app_send_task', { method: 'POST', body: body });
+    const res = await r.json();
+    if (res.code === 0) {
+      const target = printer || '系统默认打印机';
+      log('✅ 任务已入云端队列 tid=' + res.tid + ' → 目标: ' + target, 'ok');
+    } else {
+      log('❌ 下发失败：' + res.msg, 'err');
+    }
+  } catch (e) {
+    log('❌ 请求失败(' + e + ')：请确认 mock_cloud.py 已启动', 'err');
+  }
+}
+
+refreshFiles();
+refreshPrinters();
+</script>
+</body>
+</html>

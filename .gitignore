@@ -1,0 +1,14 @@
+# 构建产物
+printer-agent.exe
+*.exe.old
+*.exe.new
+
+# 演示运行目录（本地验证热更新用）
+agent_run/
+
+# IDE
+.idea/
+
+# Go 构建缓存（若在项目内）
+*.test
+*.out
