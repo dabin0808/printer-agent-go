@@ -103,7 +103,7 @@
 </div>
 
 <script>
-const API = (location.protocol === 'file:' ? 'http://127.0.0.1:8000' : '');
+const API = (location.protocol === 'file:' ? 'http://127.0.0.1:18080' : '');
 
 function log(msg, cls) {
   const box = document.getElementById('log');
@@ -130,7 +130,7 @@ async function refreshFiles() {
     });
     log('文件列表已刷新，共 ' + files.length + ' 个', 'ok');
   } catch (e) {
-    log('无法连接模拟云端(' + e + ')，请先运行 python -u mock_cloud.py', 'err');
+    log('无法连接打印服务(' + e + ')，请先双击运行 printer-agent.exe', 'err');
   }
 }
 
@@ -172,7 +172,7 @@ async function sendTask() {
       log('❌ 下发失败：' + res.msg, 'err');
     }
   } catch (e) {
-    log('❌ 请求失败(' + e + ')：请确认 mock_cloud.py 已启动', 'err');
+    log('❌ 请求失败(' + e + ')：请确认 printer-agent.exe 已启动', 'err');
   }
 }
 

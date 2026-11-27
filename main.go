@@ -11,7 +11,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -210,28 +212,71 @@ func printWorker(filesDir string) {
 		queue = queue[1:]
 		queueMu.Unlock()
 
-		// 2. printto 指定目标打印机；空则 print 送系统默认
+		// 2. 投递打印：printto 指定目标打印机；空则 print 送系统默认
 		fp := filepath.Join(filesDir, t.Filename)
-		verb := syscall.StringToUTF16Ptr("print")
-		var param uintptr
-		if t.Printer != "" {
-			verb = syscall.StringToUTF16Ptr("printto")
-			param = uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(`"`+t.Printer+`"`)))
+		if _, statErr := os.Stat(fp); statErr != nil {
+			log.Printf("文件不存在 tid=%d: %s，丢弃该任务", t.ID, fp)
+			continue
 		}
-		ret, _, _ := procShellExecuteW.Call(
-			0, uintptr(unsafe.Pointer(verb)), uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(fp))),
-			param, 0, 0 /*SW_HIDE*/)
-		// 3. 返回值<=32 表示 ShellExecute 失败，回队首 10 秒后重试
-		if ret <= 32 {
-			log.Printf("打印失败 tid=%d (ShellExecute ret=%d)，10秒后重试", t.ID, ret)
+		copies := t.Copies
+		if copies < 1 {
+			copies = 1
+		}
+		sent := true
+		var lastRet uintptr
+		for i := 0; i < copies; i++ {
+			ok, ret := sendToPrinter(fp, t.Printer)
+			lastRet = ret
+			if !ok {
+				sent = false
+				break
+			}
+		}
+		// 3. 投递失败：回队首 10 秒后重试
+		if !sent {
+			log.Printf("打印失败 tid=%d (ShellExecute ret=%d)，10秒后重试", t.ID, lastRet)
 			time.Sleep(10 * time.Second)
 			queueMu.Lock()
 			queue = append([]Task{t}, queue...)
 			queueMu.Unlock()
 			continue
 		}
-		log.Printf("已送打印机[%s]: %s x%d tid=%d", printerName(t.Printer), t.Filename, t.Copies, t.ID)
+		log.Printf("已送打印机[%s]: %s x%d tid=%d", printerName(t.Printer), t.Filename, copies, t.ID)
 	}
+}
+
+// sendToPrinter 把文件送打印机，返回(是否成功, ShellExecute返回值)。
+// 优先用 ShellExecute 的 print/printto 动词（支持 PDF/图片/Office 等注册了打印动词的类型）；
+// 对 .txt/.log/.csv 等纯文本，记事本未注册 print/printto 动词会返回 SE_ERR_NOASSOC(31)，
+// 降级为 notepad.exe /p 送系统默认打印机。
+func sendToPrinter(fp, printer string) (bool, uintptr) {
+	verb := syscall.StringToUTF16Ptr("print")
+	var param uintptr
+	if printer != "" {
+		verb = syscall.StringToUTF16Ptr("printto")
+		param = uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(`"` + printer + `"`)))
+	}
+	ret, _, _ := procShellExecuteW.Call(
+		0, uintptr(unsafe.Pointer(verb)), uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(fp))),
+		param, 0, 0 /*SW_HIDE*/)
+	if ret > 32 {
+		return true, ret
+	}
+
+	// 纯文本兜底：notepad /p 调用系统默认打印机
+	ext := strings.ToLower(filepath.Ext(fp))
+	switch ext {
+	case ".txt", ".log", ".csv", ".ini", ".json", ".md", "":
+		notepad := filepath.Join(os.Getenv("WINDIR"), "System32", "notepad.exe")
+		if _, err := os.Stat(notepad); err == nil {
+			cmd := exec.Command(notepad, "/p", fp)
+			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			if err := cmd.Start(); err == nil {
+				return true, 42 // 42 = 已启动
+			}
+		}
+	}
+	return false, ret
 }
 
 func printerName(p string) string {

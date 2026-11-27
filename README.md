@@ -107,10 +107,15 @@ Agent(每N秒) ─ GET manifest.json ──▶ latest > 当前版本？
   files\sample-order.txt ← 想打印的文件（可从本包拷）
 ```
 
-1. 双击 `printer-agent.exe`（建议右键「以管理员身份运行」，份数/双面设置才能生效）
+1. 双击 **`启动打印服务.bat`**（推荐：自动检测端口占用、启动服务并打开浏览器，避免 exe 一闪而过）；
+   或直接双击 `printer-agent.exe`（建议右键「以管理员身份运行」，份数/双面设置才能生效）
 2. 控制台显示 `PC中转端已启动 v1.1.0: http://127.0.0.1:18080`
-3. 浏览器打开 **http://127.0.0.1:18080/**
+3. 浏览器打开 **http://127.0.0.1:18080/**（也可双击 `app.html` 以 `file://` 方式打开，页面会自动连 18080）
 4. 选文件 → 选打印机 → 填份数 → 点「发送打印任务」→ 打印机出纸
+
+> 若双击 exe 窗口一闪而过，多半是 18080 端口已被占用（服务已在运行）或杀毒软件拦截，
+> 用启动脚本可获得明确提示。纯文本（.txt 等）打印走 `notepad /p`，会送到**系统默认打印机**；
+> 需要指定非默认打印机时请确认默认打印机设置，或改用支持 `printto` 的文档类型。
 
 ### 从源码构建
 
@@ -191,6 +196,7 @@ printer-agent.exe（单进程）
 |------|------|
 | `EnumPrintersW` 用 level=1 不用 level=4 | 实测 level=4 返回的名称指针指向独立堆、无法从返回缓冲区读；level=1 指针在缓冲区内可直接解析 |
 | `printto` 参数带引号 `"打印机名"` | ShellExecute 动词要求参数为带引号的打印机名，否则含空格名称解析失败 |
+| 纯文本打印降级 `notepad /p` | 记事本未给 `.txt` 注册 `print`/`printto` 动词，ShellExecute 返回 `SE_ERR_NOASSOC(31)`；实测对 txt/PDF 均失败，只有 `notepad.exe /p` 可投递（送系统默认打印机）。`sendToPrinter()` 先试 printto，失败后对文本类扩展名降级 |
 | manifest.json 必须**无 BOM** 的 UTF-8 | PowerShell `Set-Content -Encoding UTF8` 默认写 BOM，Go `json.Decoder` 会报 `invalid character 'ï'`（本次开发实测踩坑） |
 | 失败任务回**队首**而非队尾 | 打印机暂时离线时保持 FIFO 公平性，重试时不让后面任务插队 |
 | 更新用"改名替换"不用"覆盖写" | Windows 对运行中 exe 加写锁（覆盖报 5 拒绝访问），但改名不受限 |
@@ -219,6 +225,7 @@ printer-agent-go/
 ├── updater.go                ← 热更新器（清单/下载/校验/换位/semver，~270行）
 ├── app.html                  ← 操作页面（go:embed 打进 exe）
 ├── build.bat                 ← 双击构建
+├── 启动打印服务.bat          ← 双击启动（检测端口冲突+自动开浏览器，避免一闪而过）
 ├── build-hotupdate-demo.bat  ← 一键搭建热更新演示环境（构建双版本+生成 manifest）
 ├── HOTUPDATE.md              ← 热更新完整指南（云端手册+安全清单）
 ├── CODE-GUIDE.md             ← 源码逐段解读（新人上手/二次开发）
