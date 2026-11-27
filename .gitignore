@@ -1,5 +1,4 @@
-# 构建产物
-printer-agent.exe
+# 构建产物（历史残留备份/临时文件仍排除）
 *.exe.old
 *.exe.new
 
